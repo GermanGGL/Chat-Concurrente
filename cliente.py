@@ -65,7 +65,7 @@ def on_closing():
 # Configuración de la ventana principal
 root = tk.Tk()
 root.title("Chat Cliente")
-root.geometry("500x700")
+root.geometry("500x600")
 
 # Crear etiquetas y campos de entrada para la IP, puerto y nickname
 tk.Label(root, text="IP:").pack(pady=5)
@@ -106,5 +106,3 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 
 # Ejecutar la aplicación
 root.mainloop()
-
-        

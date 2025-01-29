@@ -14,11 +14,20 @@ client_details = {}
 server = None
 server_running = False
 
+""" # Establecer la conexión
+conexion = mysql.connector.connect(
+    host='localhost',      # Por ejemplo, 'localhost' o una dirección IP
+    database='dbchat',
+    user='root',
+    password='', 
+    port='3306'
+) """
+
 
 #======================================================================================================
 #===============================  Conexion a la bd   ==================================================
 #======================================================================================================
-def conectar():
+""" def conectar():
     global conexion 
     try:
         # Establecer la conexión
@@ -53,25 +62,42 @@ def conectar():
         if conexion.is_connected():
             cursor.close()
             conexion.close()
-            print('Conexión cerrada')
+            print('Conexión cerrada') """
 
 
 # Función para manejar la recepción de mensajes de un cliente y retransmitirlos a otros
+
+# Función para manejar la recepción de mensajes de un cliente y retransmitirlos a otros
 def handle_client(client_socket, addr):
+    
     nickname = client_socket.recv(1024).decode('utf-8')
     client_details[client_socket] = (addr, nickname, datetime.datetime.now())
     log_event(f"Conexión aceptada de {addr} con nombre de usuario {nickname} a las {client_details[client_socket][2].strftime('%Y-%m-%d %H:%M:%S')}")
-    
 
-    cursor = conexion.cursor()
+    # Se establece la conexion local al servidor por cada hilo creado
+    conexion_local = mysql.connector.connect(
+        host='localhost',
+        database='dbchat',
+        user='root',
+        password='',
+        port='3306'
+    )
+    
+    cursor = conexion_local.cursor()
 
     # Insertar datos en la tabla conexiones
-    insert_conexion_query = """
-    INSERT INTO conexiones (usuario, fecha, hora, ip, puerto)
-    VALUES (%s, %s, %s, %s, %s)
-    """
-    conexion_data = ('usuario1', '2025-01-24', '14:00:00', '192.168.1.1', 8080)
-    cursor.execute(insert_conexion_query, conexion_data)
+    try:
+        insert_conexion_query = """
+        INSERT INTO conexiones (usuario, fecha, hora, ip, puerto)
+        VALUES (%s, %s, %s, %s, %s)
+        """
+        fecha_actual = datetime.datetime.now().date()
+        hora_actual = datetime.datetime.now().time()
+        conexion_data = (nickname, fecha_actual, hora_actual, addr[0], addr[1])
+        cursor.execute(insert_conexion_query, conexion_data)
+        conexion_local.commit()
+    except Error as e:
+        log_event(f"Error al insertar en la tabla conexiones: {e}")
 
     while True:
         try:
@@ -79,10 +105,28 @@ def handle_client(client_socket, addr):
             broadcast(message, client_socket)
         except:
             log_event(f"Usuario {nickname} con IP {addr} se desconectó a las {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # Insertar datos en la tabla desconexiones
+            try:
+                insert_desconexion_query = """
+                INSERT INTO desconexiones (usuario, fecha, hora, ip, puerto)
+                VALUES (%s, %s, %s, %s, %s)
+                """
+                fecha_actual = datetime.datetime.now().date()
+                hora_actual = datetime.datetime.now().time()
+                desconexion_data = (nickname, fecha_actual, hora_actual, addr[0], addr[1])
+                cursor.execute(insert_desconexion_query, desconexion_data)
+                conexion_local.commit()
+            except Error as e:
+                log_event(f"Error al insertar en la tabla desconexiones: {e}")
+
             clients.remove(client_socket)
             del client_details[client_socket]
             client_socket.close()
             break
+        finally:
+            cursor.close()  
+            conexion_local.close()
 
 # Función para retransmitir mensajes a todos los clientes
 def broadcast(message, client_socket):
@@ -91,6 +135,7 @@ def broadcast(message, client_socket):
             try:
                 client.send(message.encode('utf-8'))
             except:
+                # Cerramos la conexion de la base de datos
                 client.close()
                 clients.remove(client)
 
@@ -99,7 +144,7 @@ def start_server():
     global server, server_running
     if not server_running:
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.bind(('0.0.0.0', 5555))
+        server.bind(('127.0.0.1', 5555))
         server.listen(5)
         server_running = True
         log_event("Servidor iniciado en el puerto 5555")
@@ -142,7 +187,7 @@ def on_closing():
 #======================================================================================================
 
 # Llamar a la funcion de conexion a la bd
-conectar()
+#conectar()
 
 # Configuración de la ventana principal del servidor
 root = tk.Tk()
